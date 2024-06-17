@@ -203,6 +203,8 @@ static void led_control_task(void *pvParameters)
             }
             char answer[RESP_SIZE] = { 0 };
             create_answer_string(answer, global_led_state);
+            // NOt implemented, but maybe instead of writing directly to uart, create a 
+            // Queue and send all commands in queue so we dont have to worry about accessing the driver
             uart_write_bytes(EX_UART_NUM, answer, strlen(answer));
         }
     }
@@ -252,6 +254,16 @@ static void uart_event_task(void *pvParameters)
             be full.*/
             case UART_DATA:
                 uart_read_bytes(EX_UART_NUM, dtmp, event.size, portMAX_DELAY);
+                // We have too long command detected. Ignore and send failure
+                if (else if(pos >= CMD_SIZE){
+                    // Maybe add to queue
+                    const char error_msg[] = "Command too long, ignoring"
+                    ESP_LOGE(TAG, error_msg);
+                    pos = 0;
+                    uart_write_bytes(EX_UART_NUM, error_msg , strlen(error_msg));
+                    memset(cmd_from_uart.ch_arr_command, 0, CMD_SIZE);
+                } 
+
                 // Create command string, add chars till CR is received
                 for (int i = 0; i < event.size; i++) {
                     if (dtmp[i] == CR) {
@@ -260,7 +272,8 @@ static void uart_event_task(void *pvParameters)
                         xQueueSend(command_queue, &cmd_from_uart, 0);
                         pos = 0;
                         memset(cmd_from_uart.ch_arr_command, 0, CMD_SIZE);
-                    } else {
+                    }
+                    else {
                         cmd_from_uart.ch_arr_command[pos++] = dtmp[i];
                     }
                 }
@@ -293,25 +306,6 @@ static void uart_event_task(void *pvParameters)
             //Event of UART frame error
             case UART_FRAME_ERR:
                 ESP_LOGI(TAG, "uart frame error");
-                break;
-            //UART_PATTERN_DET
-            case UART_PATTERN_DET:
-                uart_get_buffered_data_len(EX_UART_NUM, &buffered_size);
-                int pos = uart_pattern_pop_pos(EX_UART_NUM);
-                ESP_LOGI(TAG, "[UART PATTERN DETECTED] pos: %d, buffered size: %d", pos, buffered_size);
-                if (pos == -1) {
-                    // There used to be a UART_PATTERN_DET event, but the pattern position queue is full so that it can not
-                    // record the position. We should set a larger queue size.
-                    // As an example, we directly flush the rx buffer here.
-                    uart_flush_input(EX_UART_NUM);
-                } else {
-                    uart_read_bytes(EX_UART_NUM, dtmp, pos, 100 / portTICK_PERIOD_MS);
-                    uint8_t pat[PATTERN_CHR_NUM + 1];
-                    memset(pat, 0, sizeof(pat));
-                    uart_read_bytes(EX_UART_NUM, pat, PATTERN_CHR_NUM, 100 / portTICK_PERIOD_MS);
-                    ESP_LOGI(TAG, "read data: %s", dtmp);
-                    ESP_LOGI(TAG, "read pat : %s", pat);
-                }
                 break;
             //Others
             default:
