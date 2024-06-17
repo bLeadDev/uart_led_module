@@ -78,9 +78,10 @@ typedef enum{
 
 
 typedef enum{
-    UNKNOWN_COMMAND,
-    LED_COMMAND,
-    STATUS_REQUEST_COMMAND
+    CMD_UNKNOWN,
+    CMD_LED_STATE_SET,
+    CMD_STATE_REQ,
+    CMD_WRITE_NVM
 }command_type_t;
 
 #define LED_COUNT 8
@@ -90,13 +91,17 @@ led_shift_register_t global_led_state[LED_COUNT];
 
 
 command_type_t get_command_type(const command_struct_t* p_command){
-    command_type_t command_type = UNKNOWN_COMMAND;
+    command_type_t command_type = CMD_UNKNOWN;
     if(p_command->ch_arr_command[0] == 'Z' && p_command->ch_arr_command[1] == ' '){
-        command_type = LED_COMMAND;
+        command_type = CMD_LED_STATE_SET;
     }else if(p_command->ch_arr_command[0] == 'S'){
-        command_type = STATUS_REQUEST_COMMAND;
+        command_type = CMD_STATE_REQ;
     }else if(p_command->ch_arr_command[0] == 'R'){
-
+        // Is ignoreded as of now
+    }else if(   p_command->ch_arr_command[0] == 'W' && 
+                p_command->ch_arr_command[1] == 'N' &&
+                p_command->ch_arr_command[2] == 'V'){
+        command_type = CMD_WRITE_NVM
     }
     return command_type;
 }
@@ -130,7 +135,7 @@ static void cyclic_blink_task(void *pvParameters){
         gpio_config_t io_conf;
         io_conf.intr_type = GPIO_INTR_DISABLE;
         io_conf.mode = GPIO_MODE_OUTPUT;
-        io_conf.pin_bit_mask = 0x00FF;
+        io_conf.pin_bit_mask = 0x00FF; // set the pins 0-15 to output
         io_conf.pull_down_en = 1;
         io_conf.pull_up_en = 0;
         gpio_config(&io_conf);
@@ -203,12 +208,17 @@ static void led_control_task(void *pvParameters)
             }
             char answer[RESP_SIZE] = { 0 };
             create_answer_string(answer, global_led_state);
+
             // NOt implemented, but maybe instead of writing directly to uart, create a 
             // Queue and send all commands in queue so we dont have to worry about accessing the driver
             uart_write_bytes(EX_UART_NUM, answer, strlen(answer));
         }
     }
     vTaskDelete(NULL);
+}
+
+static void write_state_to_nvm(led_state_t led_states, int led_cnt){
+    
 }
 
 static void command_event_task(void *pvParameters)
@@ -219,12 +229,14 @@ static void command_event_task(void *pvParameters)
         if (xQueueReceive(command_queue, &command, portMAX_DELAY)) {
             ESP_LOGI(TAG, "Command received in task: %s", command.ch_arr_command);
             command_type_t cmd_type = get_command_type(&command);
-            if(cmd_type == LED_COMMAND){
+            if(cmd_type == CMD_LED_STATE_SET){
                 xQueueSend(led_command_queue, &command, 0);
-            }else if(cmd_type == STATUS_REQUEST_COMMAND){
+            }else if(cmd_type == CMD_STATE_REQ){
                 for(int i = 0; i < LED_COUNT; i++){
                     ESP_LOGI(TAG, "LED %d: 0x%X", i, global_led_state[i]);
                 }
+            }else if(cmd_type == CMD_WRITE_NVM){
+                write_state_to_nvm(global_led_state, LED_COUNT);
             }
             else{
                 ESP_LOGE(TAG, "Unknown command received: %s", command.ch_arr_command);
