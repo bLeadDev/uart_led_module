@@ -272,10 +272,8 @@ static void uart_event_task(void *pvParameters)
                 for (int i = 0; i < event.size; i += 1) {
                     // We have detected a too long command. Ignore and send failure
                     if (pos >= CMD_SIZE){
-                        ESP_LOGE(TAG, "Error detected: Command too long, ignoring");
+                        ESP_LOGE(TAG, "Command too long, ignoring");
                         pos = 0;
-                        const char error_msg[] = "Command too long, ignoring";
-                        uart_write_bytes(UART_NUM, error_msg , strlen(error_msg));
                         memset(cmd_from_uart.ch_arr_command, 0, CMD_SIZE);
                         break;
                     } else if (dtmp[i] == CR) {
