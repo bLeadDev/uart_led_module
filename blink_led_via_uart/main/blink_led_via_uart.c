@@ -18,8 +18,7 @@
 
 static const char *TAG = "uart_events";
 
-//esp_log_level_set(TAG, ESP_LOG_INFO);
-// esp_log_level_set(TAG, ESP_LOG_ERROR);
+
 
 #define UART_NUM UART_NUM_0
 #define PATTERN_CHR_NUM    (3)         /*!< Set the number of consecutive and identical characters received by receiver which defines a UART pattern*/
@@ -335,7 +334,8 @@ static void uart_event_task(void *pvParameters)
 
 void app_main(void)
 {
-    esp_log_level_set(TAG, ESP_LOG_INFO);
+    //esp_log_level_set(TAG, ESP_LOG_INFO);
+    esp_log_level_set(TAG, ESP_LOG_NONE);
 
     /* Configure parameters of an UART driver,
      * communication pins and install the driver */
