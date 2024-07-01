@@ -235,7 +235,6 @@ static void command_event_task(void *pvParameters)
             }else if(cmd_type == CMD_STATE_REQ){
                 send_actual_led_state_to_uart();
             }else if(cmd_type == CMD_WRITE_NVM){
-                // write_state_to_nvm(global_led_state, LED_COUNT);
                 // not implemented yet
             }
             else{
