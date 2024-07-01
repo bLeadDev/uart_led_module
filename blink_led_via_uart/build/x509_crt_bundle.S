@@ -1,4 +1,4 @@
-/* * Data converted from C:/bLeadDev/esp_ex_uart_echo/blink_led_via_uart/build/esp-idf/mbedtls/x509_crt_bundle
+/* * Data converted from C:/bLeadDev/uart_led_module/blink_led_via_uart/build/esp-idf/mbedtls/x509_crt_bundle
  */
 .data
 .section .rodata.embedded
