@@ -37,15 +37,7 @@ static QueueHandle_t uart0_queue;
 static QueueHandle_t command_queue;
 static QueueHandle_t led_command_queue;
 
-typedef enum{
-    CMD_UNKNOWN,
-    CMD_LED_STATE_SET   = (int)'Z',
-    CMD_STATE_REQ       = (int)'S',
-    CMD_SET_BLINK_MS    = (int)'B'  // Blink period in ms 
-}command_type_t;
-
 typedef struct {
-    command_type_t type;
     char ch_arr_command[CMD_SIZE];
 }command_struct_t;
 
@@ -77,22 +69,33 @@ typedef enum{
 #define BLINK_MASK_FAST         ((led_shift_register_t)(0xCCCC))
 #define BLINK_MASK_EXTRA_FAST   ((led_shift_register_t)(0xAAAA))
 
+
+typedef enum{
+    CMD_UNKNOWN,
+    CMD_LED_STATE_SET,
+    CMD_STATE_REQ,
+    CMD_WRITE_NVM // Not implemented yet
+}command_type_t;
+
 #define LED_COUNT 8
 typedef uint16_t led_shift_register_t;
 
 led_shift_register_t global_led_state[LED_COUNT];
 
 
-command_type_t parse_command_type(command_struct_t* p_command){
+command_type_t get_command_type(const command_struct_t* p_command){
     command_type_t command_type = CMD_UNKNOWN;
-    if(p_command->ch_arr_command[0] == (char)CMD_LED_STATE_SET){
+    if(p_command->ch_arr_command[0] == 'Z' && p_command->ch_arr_command[1] == ' '){
         command_type = CMD_LED_STATE_SET;
-    }else if(p_command->ch_arr_command[0] == (char)CMD_STATE_REQ){
+    }else if(p_command->ch_arr_command[0] == 'S'){
         command_type = CMD_STATE_REQ;
-    }else if(p_command->ch_arr_command[0] == (char)CMD_SET_BLINK_MS){
-        command_type = CMD_SET_BLINK_MS;
+    }else if(p_command->ch_arr_command[0] == 'R'){
+        // Is ignoreded as of now
+    }else if(   p_command->ch_arr_command[0] == 'W' && 
+                p_command->ch_arr_command[1] == 'N' &&
+                p_command->ch_arr_command[2] == 'V'){
+        command_type = CMD_WRITE_NVM;
     }
-    p_command->type = command_type;
     return command_type;
 }
 
@@ -147,7 +150,6 @@ static void cyclic_blink_task(void *pvParameters){
     }
     uint16_t active_bit = 0x0001;
     for(;;){
-
         for(int i = 0; i < LED_COUNT; i+=1){
             // if((global_led_state[i] & active_bit) == active_bit){ // Check before deletion
             if(global_led_state[i] & active_bit){
@@ -226,23 +228,21 @@ static void command_event_task(void *pvParameters)
     ESP_LOGI(TAG, "Command event task started");
     command_struct_t command;
     for (;;) {
-        if (xQueuePeek(command_queue, &command, portMAX_DELAY)){
-            if (command.type == CMD_LED_STATE_SET || command.type == CMD_STATE_REQ ){
-                xQueueReceive(command_queue, &command, portMAX_DELAY);
-            }else{
-                continue;
-            }
-            ESP_LOGI(TAG, "Command received in command_event_task: %s", command.ch_arr_command);
-
-            if(command.type == CMD_LED_STATE_SET){
+        if (xQueueReceive(command_queue, &command, portMAX_DELAY)) {
+            ESP_LOGI(TAG, "Command received in task: %s", command.ch_arr_command);
+            command_type_t cmd_type = get_command_type(&command);
+            if(cmd_type == CMD_LED_STATE_SET){
                 xQueueSend(led_command_queue, &command, 0);
-            }else if(command.type == CMD_STATE_REQ){
+            }else if(cmd_type == CMD_STATE_REQ){
                 send_actual_led_state_to_uart();
+            }else if(cmd_type == CMD_WRITE_NVM){
+                // write_state_to_nvm(global_led_state, LED_COUNT);
+                // not implemented yet
             }
             else{
                 ESP_LOGE(TAG, "Unknown command received: %s", command.ch_arr_command);
             }
-        
+        }
     }
     vTaskDelete(NULL);
 }
@@ -282,7 +282,6 @@ static void uart_event_task(void *pvParameters)
                     if (dtmp[i] == CR) {
                         cmd_from_uart.ch_arr_command[pos] = 0;
                         ESP_LOGI(TAG, "Command: %s", cmd_from_uart.ch_arr_command);
-                        parse_command_type(&cmd_from_uart); // Set the type of command
                         xQueueSend(command_queue, &cmd_from_uart, 0);
                         pos = 0;
                         memset(cmd_from_uart.ch_arr_command, 0, CMD_SIZE);
